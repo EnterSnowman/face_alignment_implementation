@@ -42,7 +42,8 @@ def project_shape(shape, rotation_inv, shift_inv):
     return new_shape.T
 
 
-def compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations, image_width, image_height, num_landmarks, stage):
+def compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations, image_width,
+                                               image_height, num_landmarks, stage):
     # print(projected_shape.shape)
     for i in range(num_landmarks):
         landmarks_differences = []
@@ -90,7 +91,9 @@ def compute_pixel_differences(images, sample_feature_locations, landmarks, stage
             image_height, image_width = image.shape[:2]
             projected_shape = image_landmarks.copy()
             for i in range(num_landmarks):
-                image_differences.append(compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations, image_width, image_height, num_landmarks, stage))
+                image_differences.append(
+                    compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations,
+                                                               image_width, image_height, num_landmarks, stage))
             differences.append(image_differences)
     else:
         for image, image_landmarks, rotation_inv, shift_inv in zip(images, landmarks, rotations_inv, shifts_inv):
@@ -98,7 +101,9 @@ def compute_pixel_differences(images, sample_feature_locations, landmarks, stage
             image_height, image_width = image.shape[:2]
             projected_shape = project_shape(image_landmarks, rotation_inv, shift_inv)
             for i in range(num_landmarks):
-                image_differences.append(compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations, image_width, image_height, num_landmarks, stage))
+                image_differences.append(
+                    compute_pixel_differences_for_single_image(projected_shape, image, sample_feature_locations,
+                                                               image_width, image_height, num_landmarks, stage))
             differences.append(image_differences)
     return np.array(differences)
 
@@ -107,5 +112,39 @@ def compute_ground_truth(target_shape, estimated_shape):
     return target_shape - estimated_shape
 
 
+def create_config_file(config_path, list_of_params):
+    with open(config_path, 'w+') as config_file:
+        config_file.writelines([str(p) + "\n" for p in list_of_params])
+        print(config_path, "created and recorded!")
+
+
+def create_radii_file(radii_path, radii):
+    with open(radii_path, 'w+') as radii_file:
+        radii_file.writelines([str(p) + "\n" for p in radii])
+        print(radii_path, "created and recorded!")
+
+
+def parse_config_file(config_path):
+    with open(config_path, 'r') as params_file:
+        params = []
+        params.append(params_file.readline().strip())
+        params.append(int(params_file.readline()))
+        params.append(int(params_file.readline()))
+        params.append(int(params_file.readline()))
+        params.append(int(params_file.readline()))
+        params.append(int(params_file.readline()))
+        params.append(params_file.readline())
+    print(params)
+    return params
+
+
+def get_radii_from_file(filename):
+    radii = []
+    with open(filename, 'r') as params_file:
+        radii = [float(l.strip()) for l in params_file.readlines()]
+    return radii
+
+
 if __name__ == "__main__":
-    print(get_sample_feature_locations([0.29, 0.21, 0.16, 0.12, 0.08], 500).shape)
+    # print(get_sample_feature_locations([0.29, 0.21, 0.16, 0.12, 0.08], 500).shape)
+    parse_config_file("ex.txt")
