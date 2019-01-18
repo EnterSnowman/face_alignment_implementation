@@ -5,7 +5,7 @@ from train.lbf_regressor import LBFRegressor
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-directory", "-dataset", type=str, default="data/my_photos_14")
-    parser.add_argument("--model-name", "-model", type=str, default="default_model_2")
+    parser.add_argument("--model-name", "-model", type=str, default="model_14_600_5")
     parser.add_argument("--trained-models-dir", "-model-dir", type=str, default="trained_models")
     parser.add_argument("--config-file", "-config", type=str, default=None)
 

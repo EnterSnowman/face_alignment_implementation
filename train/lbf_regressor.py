@@ -20,6 +20,7 @@ class LBFRegressor:
         self.global_regression_models = []
         self.bin_mappers = []
         self.nums_of_leaves = []
+        self.face_detector = cv.CascadeClassifier(haar_cascade_filename)
         if config_file is not None:
             self.config_filename = config_file
             self.params = parse_config_file(config_file)
@@ -36,9 +37,10 @@ class LBFRegressor:
                 forests, global_regressors = self.load_model_from_stage(
                     os.path.join(self.model_dir, self.model_name + "_stage_" + str(s) + ".pkl"))
                 stage_bin_mappers = self.load_bin_mappers_from_stage(os.path.join(self.model_dir, self.model_name +
-                                                                                  "_bin_feature_mapper_stage_" + str(s) + ".pkl"))
+                                                                                  "_bin_feature_mapper_stage_" + str(
+                    s) + ".pkl"))
                 stage_nums_of_leaves = self.load_num_of_leaves(os.path.join(self.model_dir, self.model_name +
-                                                                                  "_nums_of_leaves_stage_" + str(s) + ".pkl"))
+                                                                            "_nums_of_leaves_stage_" + str(s) + ".pkl"))
                 self.forests.append(forests)
                 self.global_regression_models.append(global_regressors)
                 self.bin_mappers.append(stage_bin_mappers)
@@ -50,7 +52,6 @@ class LBFRegressor:
         else:
             self.trained_models_dir = trained_models_dir
             self.is_trained_before = False
-            self.face_detector = cv.CascadeClassifier(haar_cascade_filename)
             self.stages = len(radii)
             self.n_trees = n_trees
             self.num_landmarks = num_landmarks
@@ -59,7 +60,6 @@ class LBFRegressor:
             self.tree_depth = tree_depth
             self.model_name = model_name
             self.radii = radii
-
 
     def load_data(self, data_folder, is_debug=False, debug_size=20, image_format=".jpg"):
         self.data_folder = data_folder
@@ -78,16 +78,18 @@ class LBFRegressor:
                                                                                                              bounding_boxes,
                                                                                                              self.mean_shape)
         if self.is_trained_before:
-            self.estimated_shapes = self.load_estimated_shapes(os.path.join(self.model_dir, self.model_name + "_current_estimated_shapes.pkl"))
-        self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
-                                                           self.estimated_shapes, self.current_stage+1,
-                                                           self.rotations_inv, self.shifts_inv)
+            self.estimated_shapes = self.load_estimated_shapes(
+                os.path.join(self.model_dir, self.model_name + "_current_estimated_shapes.pkl"))
+        if self.current_stage + 1 < self.stages:
+            self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
+                                                               self.estimated_shapes, self.current_stage + 1,
+                                                               self.rotations_inv, self.shifts_inv)
 
         self.ground_truth = compute_ground_truth(self.normalized_shapes, self.estimated_shapes)
-        print("Pix diff size", self.pixel_differences.shape)
-        print("Target shape size:", self.normalized_shapes.shape)
-        print("Est shape size:", self.estimated_shapes.shape)
-        print("Ground truth shape size:", self.ground_truth.shape)
+        # print("Pix diff size", self.pixel_differences.shape)
+        # print("Target shape size:", self.normalized_shapes.shape)
+        # print("Est shape size:", self.estimated_shapes.shape)
+        # print("Ground truth shape size:", self.ground_truth.shape)
 
     def load_model_from_stage(self, stage_filename):
         with open(stage_filename, 'rb') as f:
@@ -123,7 +125,6 @@ class LBFRegressor:
             pickle.dump(self.sampled_feature_locations, pickle_file)
             print("Sample feature locations saved!")
 
-
     def train(self):
         print("Start training")
         if not self.is_trained_before:
@@ -146,7 +147,7 @@ class LBFRegressor:
             self.train_global_linear_regression(stage)
             self.update_data(stage)
             self.save_stage(stage)
-            save_last_completed_stage_to_config_file(self.config_filename,stage)
+            save_last_completed_stage_to_config_file(self.config_filename, stage)
 
     def train_forests(self, stage):
         print("Train forests in stage:", stage + 1)
@@ -234,13 +235,13 @@ class LBFRegressor:
         # print(diff.shape)
         for j in range(self.num_landmarks):
             leaves_indices = self.forests[stage][j].apply(diff[0, j, :].reshape(1, -1))
-            for tree_index, tree in enumerate(self.forests[stage][j].estimators_):
-                node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)
-                binary_index = node_to_leaf_dict[leaves_indices[0, tree_index]]
+            for tree_index in range(len(self.forests[stage][j].estimators_)):
+                # node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)
+                binary_index = self.bin_mappers[stage][j][tree_index][leaves_indices[0, tree_index]]
                 data.append(1)
                 row_ind.append(0)
                 col_ind.append(pointer + binary_index)
-                pointer += num_of_leaves
+                pointer += self.nums_of_leaves[stage][j][tree_index]
         # make correct shape
         data.append(0)
         row_ind.append(0)
@@ -279,7 +280,8 @@ class LBFRegressor:
             print("Estimated shapes at stage", stage, "saved!")
         # save bin mappers
 
-        mapper_filename = os.path.join(self.model_dir, self.model_name + "_bin_feature_mapper_stage_"+str(stage)+".pkl")
+        mapper_filename = os.path.join(self.model_dir,
+                                       self.model_name + "_bin_feature_mapper_stage_" + str(stage) + ".pkl")
         if ~os.path.exists(mapper_filename):
             with open(mapper_filename, 'w+'):
                 print(mapper_filename, "created")
@@ -287,7 +289,7 @@ class LBFRegressor:
             pickle.dump(self.bin_mappers[stage], pickle_file)
             print("Mapper at stage", stage, "saved!")
 
-        leaves_filename = os.path.join(self.model_dir, self.model_name + "_nums_of_leaves_stage_"+str(stage)+".pkl")
+        leaves_filename = os.path.join(self.model_dir, self.model_name + "_nums_of_leaves_stage_" + str(stage) + ".pkl")
         if ~os.path.exists(leaves_filename):
             with open(leaves_filename, 'w+'):
                 print(leaves_filename, "created")
