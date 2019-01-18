@@ -18,12 +18,12 @@ if __name__ == "__main__":
     parser.add_argument("--n-jobs", "-jobs", type=int, default=-1)
     args = parser.parse_args()
     print("test", args.n_landmarks)
-    config_file = "trained_models/default_model_2/default_model_2_conf.txt"
+    # config_file = "trained_models/default_model_2/default_model_2_conf.txt"
     # config_file = None
 
     model = LBFRegressor(num_landmarks=args.n_landmarks, n_trees=args.n_estimators, tree_depth=args.tree_depth,
-                         n_jobs=args.n_jobs, model_name=args.model_name, config_file=config_file)
-    model.load_data(args.dataset_directory, is_debug=True, debug_size=args.debug_size, image_format=args.image_format)
+                         n_jobs=args.n_jobs, model_name=args.model_name, config_file=args.config_file)
+    model.load_data(args.dataset_directory, is_debug=args.is_debug, debug_size=args.debug_size, image_format=args.image_format)
     model.train()
     # model.save_model(args.model_filename)
 

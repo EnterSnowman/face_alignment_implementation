@@ -74,7 +74,7 @@ def compute_pixel_differences_for_single_image(projected_shape, image, sample_fe
             lum_a = image[int(round(pixel_y_a)), int(round(pixel_x_a))]
             lum_b = image[int(round(pixel_y_b)), int(round(pixel_x_b))]
 
-            diff = lum_a - lum_b
+            diff = int(lum_a) - int(lum_b)
             landmarks_differences.append(diff)
         return landmarks_differences
 
