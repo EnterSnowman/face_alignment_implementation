@@ -21,6 +21,7 @@ class LBFRegressor:
         self.bin_mappers = []
         self.nums_of_leaves = []
         if config_file is not None:
+            self.config_filename = config_file
             self.params = parse_config_file(config_file)
             self.model_name = self.params[0]
             self.stages = self.params[1]
@@ -33,7 +34,7 @@ class LBFRegressor:
             print(self.model_dir)
             for s in range(self.current_stage + 1):
                 forests, global_regressors = self.load_model_from_stage(
-                    os.path.join(self.model_dir, self.model_name + "_stage" + str(s) + ".pkl"))
+                    os.path.join(self.model_dir, self.model_name + "_stage_" + str(s) + ".pkl"))
                 stage_bin_mappers = self.load_bin_mappers_from_stage(os.path.join(self.model_dir, self.model_name +
                                                                                   "_bin_feature_mapper_stage_" + str(s) + ".pkl"))
                 stage_nums_of_leaves = self.load_num_of_leaves(os.path.join(self.model_dir, self.model_name +
@@ -58,6 +59,7 @@ class LBFRegressor:
             self.tree_depth = tree_depth
             self.model_name = model_name
             self.radii = radii
+
 
     def load_data(self, data_folder, is_debug=False, debug_size=20, image_format=".jpg"):
         self.data_folder = data_folder
@@ -112,17 +114,28 @@ class LBFRegressor:
             nums_of_leaves = pickle.load(f)
         return nums_of_leaves
 
+    def save_sample_feature_locations(self):
+        filename = os.path.join(self.model_dir, self.model_name + "_sample_feature_locations.pkl")
+        if ~os.path.exists(filename):
+            with open(filename, 'w+'):
+                print(filename, "created")
+        with open(filename, 'wb') as pickle_file:
+            pickle.dump(self.sampled_feature_locations, pickle_file)
+            print("Sample feature locations saved!")
+
+
     def train(self):
         print("Start training")
         if not self.is_trained_before:
             if not os.path.exists(os.path.join(self.trained_models_dir, self.model_name)):
                 new_model_folder = os.path.join(self.trained_models_dir, self.model_name)
                 os.makedirs(new_model_folder)
-                create_config_file(os.path.join(new_model_folder, self.model_name + "_conf.txt"),
-                                   [self.model_name, self.stages, -1, self.num_landmarks, self.n_trees, self.tree_depth,
-                                    self.data_folder])
+                self.config_filename = os.path.join(new_model_folder, self.model_name + "_conf.txt")
+                create_config_file(self.config_filename, [self.model_name, self.stages, -1, self.num_landmarks,
+                                                          self.n_trees, self.tree_depth, self.data_folder])
                 create_radii_file(os.path.join(new_model_folder, self.model_name + "_radii.txt"), self.radii)
                 self.model_dir = new_model_folder
+                self.save_sample_feature_locations()
             else:
                 print("Folder with this model name exists. Please, use another name.")
                 return -1
@@ -133,6 +146,7 @@ class LBFRegressor:
             self.train_global_linear_regression(stage)
             self.update_data(stage)
             self.save_stage(stage)
+            save_last_completed_stage_to_config_file(self.config_filename,stage)
 
     def train_forests(self, stage):
         print("Train forests in stage:", stage + 1)
@@ -202,11 +216,7 @@ class LBFRegressor:
                 pointer = 0
                 leaves_indices = landmarks_indices[i, :]
                 for tree_index in range(self.n_trees):
-                    # print(leaves_indices[tree_index])
                     binary_index = self.bin_mappers[stage][j][tree_index][leaves_indices[tree_index]]
-                    # print(type(self.bin_mappers[stage][j][tree_index]))
-                    # print(len(self.bin_mappers[stage]))
-                    # print(i)
                     row_ind.append(i)
                     col_ind.append(forest_pointer + pointer + binary_index)
                     data.append(1)

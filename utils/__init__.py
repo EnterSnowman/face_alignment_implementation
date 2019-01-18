@@ -128,14 +128,22 @@ def parse_config_file(config_path):
     with open(config_path, 'r') as params_file:
         params = []
         params.append(params_file.readline().strip())
-        params.append(int(params_file.readline()))
-        params.append(int(params_file.readline()))
-        params.append(int(params_file.readline()))
-        params.append(int(params_file.readline()))
-        params.append(int(params_file.readline()))
-        params.append(params_file.readline())
+        params.append(int(params_file.readline().strip()))
+        params.append(int(params_file.readline().strip()))
+        params.append(int(params_file.readline().strip()))
+        params.append(int(params_file.readline().strip()))
+        params.append(int(params_file.readline().strip()))
+        params.append(params_file.readline().strip())
     print(params)
     return params
+
+
+def save_last_completed_stage_to_config_file(config_path, stage):
+    with open(config_path, 'r') as params_file:
+        params = [l.strip() for l in params_file.readlines()]
+    params[2] = stage
+    with open(config_path, 'w') as params_file:
+        params_file.writelines([str(p) + "\n" for p in params])
 
 
 def get_radii_from_file(filename):

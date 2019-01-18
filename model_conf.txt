@@ -1,0 +1,7 @@
+model_name // string ; each stage names ' model_name_stage_0.pkl ' , 0 - num of stage {0..total_stages - 1}; must be in same folder with config file
+total_stages // int ; all stages required for particular model
+current_stage // int ; last stage completed in training
+num_landmarks // int ;
+num_trees // int ;
+tree_depth // int ;
+data_folder // string; 
