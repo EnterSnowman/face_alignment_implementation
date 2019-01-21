@@ -32,6 +32,7 @@ class LBFRegressor:
             self.tree_depth = self.params[5]
             self.data_folder = self.params[6]
             self.model_dir = os.path.dirname(config_file)
+
             print(self.model_dir)
             for s in range(self.current_stage + 1):
                 forests, global_regressors = self.load_model_from_stage(
@@ -49,6 +50,7 @@ class LBFRegressor:
                 os.path.join(self.model_dir, self.model_name + "_sample_feature_locations.pkl"))
             self.radii = get_radii_from_file(os.path.join(self.model_dir, self.model_name + "_radii.txt"))
             self.is_trained_before = True
+            self.mean_shape = self.load_mean_shape(os.path.join(self.model_dir, self.model_name + "_mean_shape.pkl"))
         else:
             self.trained_models_dir = trained_models_dir
             self.is_trained_before = False
@@ -72,6 +74,7 @@ class LBFRegressor:
         # self.images, localized_landmarks, self.normalized_shapes, rotations, self.rotations_inv, shifts, \
         # self.shifts_inv, pupil_distances, self.estimated_shapes = get_training_data(ims, localized_landmarks,
         #                                                                             bounding_boxes, self.mean_shape)
+        self.save_mean_shape()
         self.rotations_inv, self.shifts_inv = None, None
         self.images, self.normalized_shapes, self.estimated_shapes = get_training_data_without_normalization(ims,
                                                                                                              localized_landmarks,
@@ -116,6 +119,11 @@ class LBFRegressor:
             nums_of_leaves = pickle.load(f)
         return nums_of_leaves
 
+    def load_mean_shape(self, mean_shape_filename):
+        with open(mean_shape_filename, 'rb') as f:
+            mean_shape = pickle.load(f)
+        return mean_shape
+
     def save_sample_feature_locations(self):
         filename = os.path.join(self.model_dir, self.model_name + "_sample_feature_locations.pkl")
         if ~os.path.exists(filename):
@@ -124,6 +132,15 @@ class LBFRegressor:
         with open(filename, 'wb') as pickle_file:
             pickle.dump(self.sampled_feature_locations, pickle_file)
             print("Sample feature locations saved!")
+
+    def save_mean_shape(self):
+        filename = os.path.join(self.model_dir, self.model_name + "_mean_shape.pkl")
+        if ~os.path.exists(filename):
+            with open(filename, 'w+'):
+                print(filename, "created")
+        with open(filename, 'wb') as pickle_file:
+            pickle.dump(self.mean_shape, pickle_file)
+            print("Mean shape saved!")
 
     def train(self):
         print("Start training")

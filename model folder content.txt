@@ -6,3 +6,4 @@ model_name_bin_feature_mapper_stage_0,1,2..current_stage.pkl
 model_name_nums_of_leaves_stage_0,1,2..cs.pks - (num_landmarks, num_estimators)
 model_name_radii.txt
 model_name_current_estimated_shapes.pkl - (num_images, num_landmarks, 2)
+model_name_mean_shape.pkl - (num_landmarks, 2)
