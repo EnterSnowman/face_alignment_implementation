@@ -4,4 +4,5 @@ current_stage // int ; last stage completed in training
 num_landmarks // int ;
 num_trees // int ;
 tree_depth // int ;
-data_folder // string; 
+data_folder // string;
+random_forest_lib_type // string; sklearn or opencv

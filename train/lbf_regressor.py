@@ -15,7 +15,7 @@ class LBFRegressor:
 
     def __init__(self, tree_depth=7, n_trees=1200, radii=[0.29, 0.21, 0.16, 0.12, 0.08], num_landmarks=68,
                  num_features=500, n_jobs=2, haar_cascade_filename="..\models\haarcascade_frontalface_default.xml",
-                 config_file=None, model_name="default_model", trained_models_dir="trained_models"):
+                 config_file=None, model_name="default_model", trained_models_dir="trained_models", rf_type="sklearn"):
         self.forests = []
         self.global_regression_models = []
         self.bin_mappers = []
@@ -31,6 +31,7 @@ class LBFRegressor:
             self.n_trees = self.params[4]
             self.tree_depth = self.params[5]
             self.data_folder = self.params[6]
+            self.rf_type = self.params[7]
             self.model_dir = os.path.dirname(config_file)
 
             print(self.model_dir)
@@ -62,6 +63,7 @@ class LBFRegressor:
             self.tree_depth = tree_depth
             self.model_name = model_name
             self.radii = radii
+            self.rf_type = rf_type
 
     def load_data(self, data_folder, is_debug=False, debug_size=20, image_format=".jpg"):
         self.data_folder = data_folder
@@ -74,7 +76,6 @@ class LBFRegressor:
         # self.images, localized_landmarks, self.normalized_shapes, rotations, self.rotations_inv, shifts, \
         # self.shifts_inv, pupil_distances, self.estimated_shapes = get_training_data(ims, localized_landmarks,
         #                                                                             bounding_boxes, self.mean_shape)
-        self.save_mean_shape()
         self.rotations_inv, self.shifts_inv = None, None
         self.images, self.normalized_shapes, self.estimated_shapes = get_training_data_without_normalization(ims,
                                                                                                              localized_landmarks,
@@ -150,10 +151,12 @@ class LBFRegressor:
                 os.makedirs(new_model_folder)
                 self.config_filename = os.path.join(new_model_folder, self.model_name + "_conf.txt")
                 create_config_file(self.config_filename, [self.model_name, self.stages, -1, self.num_landmarks,
-                                                          self.n_trees, self.tree_depth, self.data_folder])
+                                                          self.n_trees, self.tree_depth, self.data_folder,
+                                                          self.rf_type])
                 create_radii_file(os.path.join(new_model_folder, self.model_name + "_radii.txt"), self.radii)
                 self.model_dir = new_model_folder
                 self.save_sample_feature_locations()
+                self.save_mean_shape()
             else:
                 print("Folder with this model name exists. Please, use another name.")
                 return -1
@@ -169,8 +172,6 @@ class LBFRegressor:
     def train_forests(self, stage):
         print("Train forests in stage:", stage + 1)
         stage_forests = []
-        for landmark_index in range(self.num_landmarks):
-            stage_forests.append(RandomForestRegressor(n_estimators=self.n_trees, max_depth=self.tree_depth, n_jobs=-1))
         stage_binary_mappers = []
         stage_nums_of_leaves = []
         self.forests.append(stage_forests)
@@ -179,8 +180,19 @@ class LBFRegressor:
             landmark_nums_leaves = []
             print("train forest for landmark #", landmark_index)
             start = time.time()
-            self.forests[stage][landmark_index].fit(self.pixel_differences[:, landmark_index, :],
-                                                    self.ground_truth[:, landmark_index, :])
+            if self.rf_type == "sklearn":
+                stage_forests.append(
+                    RandomForestRegressor(n_estimators=self.n_trees, max_depth=self.tree_depth, n_jobs=-1))
+                self.forests[stage][landmark_index].fit(self.pixel_differences[:, landmark_index, :],
+                                                        self.ground_truth[:, landmark_index, :])
+            elif self.rf_type == "opencv":
+                model = cv.ml.RTrees_create()
+                model.setMaxDepth(self.tree_depth)
+                model.setTermCriteria((cv.TERM_CRITERIA_MAX_ITER, self.n_trees, 1))
+                stage_forests.append(model)
+                print(self.ground_truth[:, landmark_index, :].astype(np.float32))
+                self.forests[stage][landmark_index].train(self.pixel_differences[:, landmark_index, :],
+                                                          cv.ml.ROW_SAMPLE, self.ground_truth[:, landmark_index, :].astype(np.float32))
             print("Train time:", time.time() - start)
             for tree in self.forests[stage][landmark_index].estimators_:
                 node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)

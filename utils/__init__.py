@@ -134,6 +134,7 @@ def parse_config_file(config_path):
         params.append(int(params_file.readline().strip()))
         params.append(int(params_file.readline().strip()))
         params.append(params_file.readline().strip())
+        params.append(params_file.readline().strip())  # rf type
     print(params)
     return params
 
