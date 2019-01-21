@@ -334,9 +334,11 @@ class LBFRegressor:
             # put mean shape
             # get pixel diff stage 1
             # pass through models
-
+            fw = w / 2
+            fh = h / 2
             estimated_shape = self.mean_shape.copy()
-
+            for p in estimated_shape:
+                cv.circle(roi_color, (int(p[0] * fw + fw), int(p[1] * fh + fh)), 4, (255, 0, 0), -1)
             for stage in range(self.stages):
                 print("Stage", stage + 1)
                 start = time.time()
@@ -348,8 +350,7 @@ class LBFRegressor:
                 # print("image delta:", image_delta)
                 estimated_shape += image_delta.reshape(estimated_shape.shape)
             # print("Predict time:", time.time() - start)
-            fw = w / 2
-            fh = h / 2
+
             for p in estimated_shape:
                 cv.circle(roi_color, (int(p[0] * fw + fw), int(p[1] * fh + fh)), 4, (0, 0, 255), -1)
             cv.imshow(str(time.time()), roi_color)
