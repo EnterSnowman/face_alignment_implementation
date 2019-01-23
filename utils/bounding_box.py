@@ -3,15 +3,15 @@ import cv2 as cv
 import os
 
 
-def get_bounding_boxes(list_of_image_names, landmarks, make_square=True):
+def get_bounding_boxes(list_of_image_names, landmarks, make_square=True, padding_ratio=0.):
     bounding_boxes = []
     for image_name, image_landmarks in zip(list_of_image_names, landmarks):
         image_rgb = cv.imread(image_name)
-        bounding_boxes.append(get_single_bounding_box(image_name, image_rgb, image_landmarks, make_square))
+        bounding_boxes.append(get_single_bounding_box(image_name, image_rgb, image_landmarks, make_square, padding_ratio))
     return bounding_boxes
 
 
-def get_single_bounding_box(image_name, image, image_landmarks, make_square=True):
+def get_single_bounding_box(image_name, image, image_landmarks, make_square=True, padding_ratio=0.):
     image_height = image.shape[0]
     image_width = image.shape[1]
     # print("Im h:", image_height, "Im w:", image_width)
@@ -26,11 +26,11 @@ def get_single_bounding_box(image_name, image, image_landmarks, make_square=True
         print("Unable to make correct square!!!")
         os.remove(image_name)
         print(image_name, "removed!")
-    return expand_bounding_box([x, y, w, h], image_width, image_height)
+    return expand_bounding_box([x, y, w, h], image_width, image_height, padding_ratio)
 
 
-def expand_bounding_box(box, image_width, image_height):
-    padding = box[2] * 0.3
+def expand_bounding_box(box, image_width, image_height, padding_ratio=0.):
+    padding = box[2] * padding_ratio
     padding = min(padding, box[0])
     padding = min(padding, box[1])
     padding = min(padding, image_width - (box[0] + box[2]))

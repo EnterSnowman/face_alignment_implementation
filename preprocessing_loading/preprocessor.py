@@ -3,10 +3,11 @@ import cv2 as cv
 import numpy as np
 
 from utils.bounding_box import get_bounding_boxes
+from utils import get_similarity_transform, get_sample_feature_locations,compute_pixel_differences_at_stage
+from preprocessing_loading.loader import *
 
-
-def get_images_with_bounding_boxes(image_folder, image_format=".jpg", landmark_format=".pts", is_debug=False,
-                                   debug_size=20):
+def get_list_of_images_with_bounding_boxes(image_folder, image_format=".jpg", landmark_format=".pts", is_debug=False,
+                                           debug_size=20):
     ims, lms = get_list_of_images_and_landmarks(image_folder, image_format, landmark_format, is_debug=is_debug,
                                                 debug_size=debug_size)
     bounding_boxes = get_bounding_boxes(ims, lms)
@@ -72,10 +73,13 @@ def get_training_data(list_of_image_names, localized_landmarks, bounding_boxes, 
 
         image_rgb = cv.imread(image_name)
         image_gray = cv.cvtColor(image_rgb, cv.COLOR_BGR2GRAY)
-        image_gray = image_gray[bounding_box[1]:bounding_box[1] + bounding_box[3],
-                     bounding_box[0]:bounding_box[0] + bounding_box[2]]
-        if bounding_box[2] > max_image_size:
-            image_gray = cv.resize(image_gray, (max_image_size, max_image_size))
+        # image_gray = image_gray[bounding_box[1]:bounding_box[1] + bounding_box[3],
+        #              bounding_box[0]:bounding_box[0] + bounding_box[2]]
+        if bounding_box[2] > 2000:
+            image_gray = cv.resize(image_gray, (bounding_box[2] / 3., bounding_box[3] / 3.))
+        elif 1400 < bounding_box[2] <= 2000:
+            image_gray = cv.resize(image_gray, (bounding_box[2] / 2., bounding_box[3] / 2.))
+
         images.append(image_gray)
         normalized_shapes.append(normalized_shape)
         estimated_shapes.append(mean_shape.copy())
@@ -100,7 +104,49 @@ def get_training_data_without_normalization(list_of_image_names, localized_landm
     return images, np.array(localized_landmarks), np.array(estimated_shapes)
 
 
+# def get_regression_targets(estimated_shapes, ground_truth):
+#     targets = []
+#     estimated_shapes = []
+#     rotations = []
+#     scales = []
+#     for est_shape, single_ground_truth in zip(estimated_shapes, ground_truth):
+#         estimated_shapes.append(mean_shape.copy())
+#         target = single_ground_truth - est_shape
+#         rotation, scale = get_similarity_transform(target, est_shape)
+#         target = np.dot(target, rotation.T)
+#         target *= scale
+#         rotation, scale = get_similarity_transform(mean_shape, estimated_shapes[i])
+#         rotations.append(rotation)
+#         scales.append(scale)
+#         targets.append(target)
+#     return targets, rotations, scales
+
+
+def get_regression_targets_by_mean_shape(mean_shape, ground_truth, estimated_shapes):
+    targets = []
+    rotations = []
+    scales = []
+    for single_ground_truth, est_shape in zip(ground_truth, estimated_shapes):
+        target = single_ground_truth - mean_shape
+        rotation, scale = get_similarity_transform(target, mean_shape)
+        target = np.dot(target, rotation.T)
+        target *= scale
+        rotation, scale = get_similarity_transform(mean_shape, est_shape)
+        rotations.append(rotation)
+        scales.append(scale)
+        targets.append(target)
+    # print("targets", len(targets))
+    # print("est shapes", len(estimated_shapes))
+    # print("rotations", len(rotations))
+    # print("scales", len(scales))
+    return np.array(targets), np.array(rotations), np.array(scales)
+
+
 if __name__ == "__main__":
-    ims, lms, bounding_boxes = get_images_with_bounding_boxes("..\data\helen\\trainset")
+    ims, lms, bounding_boxes = get_list_of_images_with_bounding_boxes("..\data\my_photos_14", image_format=".png")
     mean_shape, localized_landmarks = get_mean_shape_and_localized_landmarks(lms, bounding_boxes)
-    print(mean_shape)
+    # print(mean_shape)
+    images = get_images_in_gray(ims)
+    sample_feature_loc = get_sample_feature_locations([0.29, 0.21, 0.16, 0.12, 0.08], 500)
+    targets, estimated_shapes, rotations, scales = get_regression_targets_by_mean_shape(mean_shape, localized_landmarks)
+    pixels = compute_pixel_differences_at_stage(images, sample_feature_loc, localized_landmarks, 0, rotations, scales, bounding_boxes)

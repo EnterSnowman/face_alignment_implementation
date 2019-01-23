@@ -1,6 +1,7 @@
 import glob
 import os
 import numpy as np
+import cv2 as cv
 
 
 def get_list_of_images_and_landmarks(image_folder, image_format=".jpg", landmark_format=".pts", is_debug=False,
@@ -30,6 +31,13 @@ def get_landmarks_as_numpy_array(filename):
         landmarks.extend([[float(coor) for coor in line[:-1].split(" ")] for line in lines])
         # print(landmarks)
     return np.array(landmarks)
+
+
+def get_images_in_gray(list_of_image_names):
+    images = []
+    for name in list_of_image_names:
+        images.append(cv.cvtColor(cv.imread(name), cv.COLOR_BGR2GRAY))
+    return images
 
 
 if __name__ == "__main__":

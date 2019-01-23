@@ -1,8 +1,10 @@
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import LinearSVR
 from utils import *
-from preprocessing_loading.preprocessor import get_images_with_bounding_boxes, get_mean_shape_and_localized_landmarks, \
-    get_training_data, get_training_data_without_normalization
+from preprocessing_loading.preprocessor import get_list_of_images_with_bounding_boxes, \
+    get_mean_shape_and_localized_landmarks, \
+    get_training_data, get_training_data_without_normalization, get_regression_targets_by_mean_shape
+from preprocessing_loading.loader import get_images_in_gray
 from scipy import sparse
 from utils.bounding_box import make_square_bounding_box, expand_bounding_box
 import pickle
@@ -67,29 +69,45 @@ class LBFRegressor:
 
     def load_data(self, data_folder, is_debug=False, debug_size=20, image_format=".jpg"):
         self.data_folder = data_folder
-        ims, lms, bounding_boxes = get_images_with_bounding_boxes(data_folder, is_debug=is_debug, debug_size=debug_size,
-                                                                  image_format=image_format)
+        ims, lms, self.bounding_boxes = get_list_of_images_with_bounding_boxes(data_folder, is_debug=is_debug,
+                                                                               debug_size=debug_size,
+                                                                               image_format=image_format)  # +
         print("Landmarks shape:", lms.shape)
         print("Images len:", len(ims))
 
-        self.mean_shape, localized_landmarks = get_mean_shape_and_localized_landmarks(lms, bounding_boxes)
+        self.mean_shape, self.localized_landmarks = get_mean_shape_and_localized_landmarks(lms,
+                                                                                           self.bounding_boxes)  # +
+
         # self.images, localized_landmarks, self.normalized_shapes, rotations, self.rotations_inv, shifts, \
         # self.shifts_inv, pupil_distances, self.estimated_shapes = get_training_data(ims, localized_landmarks,
         #                                                                             bounding_boxes, self.mean_shape)
-        self.rotations_inv, self.shifts_inv = None, None
-        self.images, self.normalized_shapes, self.estimated_shapes = get_training_data_without_normalization(ims,
-                                                                                                             localized_landmarks,
-                                                                                                             bounding_boxes,
-                                                                                                             self.mean_shape)
+        # self.rotations_inv, self.shifts_inv = None, None
+        # self.images, self.normalized_shapes, self.estimated_shapes = get_training_data_without_normalization(ims,
+        #                                                                                                      self.localized_landmarks,
+        #                                                                                                      bounding_boxes,
+        #                                                                                                      self.mean_shape)
         if self.is_trained_before:
             self.estimated_shapes = self.load_estimated_shapes(
                 os.path.join(self.model_dir, self.model_name + "_current_estimated_shapes.pkl"))
+        else:
+            self.estimated_shapes = []
+            for i in range(self.localized_landmarks.shape[0]):
+                self.estimated_shapes.append(self.mean_shape.copy())
+            self.estimated_shapes = np.array(self.estimated_shapes)
+        self.images = get_images_in_gray(ims)
+        self.targets, self.rotations, self.scales = \
+            get_regression_targets_by_mean_shape(self.mean_shape, self.localized_landmarks, self.estimated_shapes)
         if self.current_stage + 1 < self.stages:
-            self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
-                                                               self.estimated_shapes, self.current_stage + 1,
-                                                               self.rotations_inv, self.shifts_inv)
+            self.pixel_differences = compute_pixel_differences_at_stage(self.images, self.sampled_feature_locations,
+                                                                        self.estimated_shapes, self.current_stage + 1,
+                                                                        self.rotations, self.scales,
+                                                                        self.bounding_boxes)
+            # self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
+            #                                                    self.estimated_shapes, self.current_stage + 1,
+            #                                                    self.rotations_inv, self.shifts_inv)
 
-        self.ground_truth = compute_ground_truth(self.normalized_shapes, self.estimated_shapes)
+        # self.ground_truth = compute_ground_truth(self.normalized_shapes, self.estimated_shapes)
+
         # print("Pix diff size", self.pixel_differences.shape)
         # print("Target shape size:", self.normalized_shapes.shape)
         # print("Est shape size:", self.estimated_shapes.shape)
@@ -184,7 +202,7 @@ class LBFRegressor:
                 stage_forests.append(
                     RandomForestRegressor(n_estimators=self.n_trees, max_depth=self.tree_depth, n_jobs=-1))
                 self.forests[stage][landmark_index].fit(self.pixel_differences[:, landmark_index, :],
-                                                        self.ground_truth[:, landmark_index, :])
+                                                        self.targets[:, landmark_index, :])
             elif self.rf_type == "opencv":
                 model = cv.ml.RTrees_create()
                 model.setMaxDepth(self.tree_depth)
@@ -192,7 +210,8 @@ class LBFRegressor:
                 stage_forests.append(model)
                 print(self.ground_truth[:, landmark_index, :].astype(np.float32))
                 self.forests[stage][landmark_index].train(self.pixel_differences[:, landmark_index, :],
-                                                          cv.ml.ROW_SAMPLE, self.ground_truth[:, landmark_index, :].astype(np.float32))
+                                                          cv.ml.ROW_SAMPLE,
+                                                          self.ground_truth[:, landmark_index, :].astype(np.float32))
             print("Train time:", time.time() - start)
             for tree in self.forests[stage][landmark_index].estimators_:
                 node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)
@@ -206,17 +225,17 @@ class LBFRegressor:
     def train_global_linear_regression(self, stage):
         print("Train global regression in stage", stage + 1)
         stage_global_regression_models = []
-        for landmark_index in range(self.ground_truth.shape[1]):
+        for landmark_index in range(self.targets.shape[1]):
             stage_global_regression_models.append(
                 [LinearSVR(C=0.00001, epsilon=0., loss='squared_epsilon_insensitive'),
                  LinearSVR(C=0.00001, epsilon=0., loss='squared_epsilon_insensitive')])
         self.global_regression_models.append(stage_global_regression_models)
-        for landmark_index in range(self.ground_truth.shape[1]):
-            for coor in range(self.ground_truth.shape[2]):
+        for landmark_index in range(self.targets.shape[1]):
+            for coor in range(self.targets.shape[2]):
                 print("Train global regression for landmark #", landmark_index, "coor", coor)
                 start = time.time()
                 self.global_regression_models[stage][landmark_index][coor].fit(self.binary_features,
-                                                                               self.ground_truth[:, landmark_index,
+                                                                               self.targets[:, landmark_index,
                                                                                coor])
                 print("Train time:", time.time() - start)
 
@@ -227,15 +246,15 @@ class LBFRegressor:
         data = []
         tree_maps = []
         nums_of_leaves = []
-        for j in range(self.num_landmarks):
-            single_forest_maps = []
-            forest_nums_of_leaves = []
-            for tree in self.forests[stage][j].estimators_:
-                node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)
-                single_forest_maps.append(node_to_leaf_dict)
-                forest_nums_of_leaves.append(num_of_leaves)
-            tree_maps.append(single_forest_maps)
-            nums_of_leaves.append(forest_nums_of_leaves)
+        # for j in range(self.num_landmarks):
+        #     single_forest_maps = []
+        #     forest_nums_of_leaves = []
+        #     for tree in self.forests[stage][j].estimators_:
+        #         node_to_leaf_dict, num_of_leaves = get_dict_node_to_leaf_number(tree)
+        #         single_forest_maps.append(node_to_leaf_dict)
+        #         forest_nums_of_leaves.append(num_of_leaves)
+        #     tree_maps.append(single_forest_maps)
+        #     nums_of_leaves.append(forest_nums_of_leaves)
         # all_leaves_indices
         forest_pointer = 0
         for j in range(self.num_landmarks):
@@ -284,10 +303,15 @@ class LBFRegressor:
                 delta = self.global_regression_models[stage][i][j].predict(self.binary_features)
                 self.estimated_shapes[:, i, j] += delta
         if stage < self.stages - 1:
-            self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
-                                                               self.estimated_shapes, stage + 1,
-                                                               self.rotations_inv, self.shifts_inv)
-        self.ground_truth = compute_ground_truth(self.normalized_shapes, self.estimated_shapes)
+            self.pixel_differences = compute_pixel_differences_at_stage(self.images, self.sampled_feature_locations,
+                                                                        self.estimated_shapes, self.current_stage + 1,
+                                                                        self.rotations, self.scales,
+                                                                        self.bounding_boxes)
+            # self.pixel_differences = compute_pixel_differences(self.images, self.sampled_feature_locations,
+            #                                                    self.estimated_shapes, stage + 1,
+            #                                                    self.rotations_inv, self.shifts_inv)
+        self.targets, self.rotations, self.scales = \
+            get_regression_targets_by_mean_shape(self.mean_shape, self.localized_landmarks, self.estimated_shapes)
 
     def save_stage(self, stage):
         # save forests and SVRs

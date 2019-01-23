@@ -5,10 +5,10 @@ from train.lbf_regressor import LBFRegressor
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-directory", "-dataset", type=str, default="data/my_photos_14")
-    parser.add_argument("--model-name", "-model", type=str, default="cv_test")
+    parser.add_argument("--model-name", "-model", type=str, default="model_new")
     parser.add_argument("--trained-models-dir", "-model-dir", type=str, default="trained_models")
     parser.add_argument("--config-file", "-config", type=str, default=None)
-    parser.add_argument("--rf-lib", '-rf-lib', type=str, default="opencv")
+    parser.add_argument("--rf-lib", '-rf-lib', type=str, default="sklearn")
 
     parser.add_argument("--n-landmarks", "-n-lm", type=int, default=14)
     parser.add_argument("--tree-depth", "-d", type=int, default=5)
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--n-jobs", "-jobs", type=int, default=-1)
     args = parser.parse_args()
     print("test", args.n_landmarks)
-    # config_file = "trained_models/default_model_2/default_model_2_conf.txt"
+    config_file = "trained_models/model_new/model_new_conf.txt"
     # config_file = None
 
     model = LBFRegressor(num_landmarks=args.n_landmarks, n_trees=args.n_estimators, tree_depth=args.tree_depth,

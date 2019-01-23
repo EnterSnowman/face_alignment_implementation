@@ -79,6 +79,89 @@ def compute_pixel_differences_for_single_image(projected_shape, image, sample_fe
         return landmarks_differences
 
 
+def get_similarity_transform(shape_from, shape_to):
+    rotation = np.zeros((2, 2))
+    scale = 0.
+    center_x_1, center_y_1 = np.mean(shape_to, axis=0)
+    center_x_2, center_y_2 = np.mean(shape_from, axis=0)
+
+    center_x_1 /= shape_to.shape[0]
+    center_y_1 /= shape_to.shape[0]
+    center_x_2 /= shape_from.shape[0]
+    center_y_2 /= shape_from.shape[0]
+
+    temp1 = shape_to.copy()
+    temp2 = shape_from.copy()
+
+    temp1 -= np.array([center_x_1, center_y_1]).reshape((1, 2))
+    temp2 -= np.array([center_x_2, center_y_2]).reshape((1, 2))
+
+    covariance1, mean1 = cv.calcCovarMatrix(temp1, None, cv.COVAR_COLS)
+    # print("cov mean:", covariance1, mean1)
+    covariance2, mean2 = cv.calcCovarMatrix(temp2, None, cv.COVAR_COLS)
+
+    s1, s2 = np.sqrt(np.linalg.norm(covariance1)), np.sqrt(np.linalg.norm(covariance2))
+
+    scale = s1 / s2
+    temp1 /= s1
+    temp2 /= s2
+
+    num = 0.
+    den = 0.
+
+    for t1, t2 in zip(temp1, temp2):
+        num += t1[1] * t2[0] - t1[0] * t2[1]
+        den += t1[0] * t2[0] + t1[1] * t2[1]
+
+    norm = np.sqrt(num * num + den * den)
+    sin_theta = num / norm
+    cos_theta = den / norm
+    rotation[0, 0] = cos_theta
+    rotation[0, 1] = -sin_theta
+    rotation[1, 0] = sin_theta
+    rotation[1, 1] = cos_theta
+    # print("rot scale", rotation, scale)
+    return rotation, scale
+
+
+def compute_pixel_differences_at_stage(images, sample_feature_locations, landmarks, stage, rotations, scales, bounding_boxes):
+    pixel_differences = []
+    num_landmarks = landmarks.shape[1]
+    for image, image_landmark, rotation, scale, bounding_box in zip(images, landmarks, rotations, scales,
+                                                                    bounding_boxes):
+        image_pixel_differences = []
+        for i in range(num_landmarks):
+            landmark_differences = []
+            landmark_x, landmark_y = image_landmark[i, 0], image_landmark[i, 1]
+            for sample_feature_location in sample_feature_locations[stage, :, :]:
+                delta_x = rotation[0, 0] * sample_feature_location[0] + rotation[0, 1] * sample_feature_location[1]
+                delta_y = rotation[1, 0] * sample_feature_location[0] + rotation[1, 1] * sample_feature_location[1]
+                delta_x = scale * delta_x * bounding_box[2] / 2.0
+                delta_y = scale * delta_y * bounding_box[3] / 2.0
+                real_x = delta_x + landmark_x
+                real_y = delta_y + landmark_y
+                real_x = max(0, min(real_x, image.shape[1] - 1))
+                real_y = max(0, min(real_y, image.shape[0] - 1))
+                tmp = int(image[int(round(real_y)), int(round(real_x))])
+
+                delta_x = rotation[0, 0] * sample_feature_location[2] + rotation[0, 1] * sample_feature_location[3]
+                delta_y = rotation[1, 0] * sample_feature_location[2] + rotation[1, 1] * sample_feature_location[3]
+                delta_x = scale * delta_x * bounding_box[2] / 2.0
+                delta_y = scale * delta_y * bounding_box[3] / 2.0
+                real_x = delta_x + landmark_x
+                real_y = delta_y + landmark_y
+                real_x = max(0, min(real_x, image.shape[1] - 1))
+                real_y = max(0, min(real_y, image.shape[0] - 1))
+
+                landmark_differences.append(tmp - int(image[int(round(real_y)), int(round(real_x))]))
+            image_pixel_differences.append(landmark_differences)
+        pixel_differences.append(image_pixel_differences)
+    res = np.array(pixel_differences)
+    print(res.shape)
+    return res
+
+
+
 def compute_pixel_differences(images, sample_feature_locations, landmarks, stage, rotations_inv, shifts_inv):
     # print(landmarks)
     num_landmarks = landmarks.shape[1]
@@ -155,5 +238,5 @@ def get_radii_from_file(filename):
 
 
 if __name__ == "__main__":
-    # print(get_sample_feature_locations([0.29, 0.21, 0.16, 0.12, 0.08], 500).shape)
-    parse_config_file("ex.txt")
+    print(get_sample_feature_locations([0.29, 0.21, 0.16, 0.12, 0.08], 500).shape)
+    # parse_config_file("ex.txt")
